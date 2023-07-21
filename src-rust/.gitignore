@@ -1,0 +1,5 @@
+/generated
+/target
+
+# Ignore lockfile for libraries https://github.com/platformio/platformio-vscode-ide/issues/91
+Cargo.lock

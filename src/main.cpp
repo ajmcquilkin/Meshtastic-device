@@ -75,6 +75,8 @@ NRF52Bluetooth *nrf52Bluetooth;
 #include "AccelerometerThread.h"
 #endif
 
+#include "rusthelpers.h"
+
 using namespace concurrency;
 
 // We always create a screen object, but we only init it if we find the hardware
@@ -200,6 +202,10 @@ void setup()
     serialSinceMsec = millis();
 
     LOG_INFO("\n\n//\\ E S H T /\\ S T / C\n\n");
+
+    LOG_INFO("Before Rust code\n");
+    auto rust_add_answer = add_from_rust(1, 2);
+    LOG_INFO("Rust add answer: %d === %d\n", rust_add_answer, 3);
 
     initDeepSleep();
 
