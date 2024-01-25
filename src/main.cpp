@@ -32,6 +32,72 @@
 #include <utility>
 // #include <driver/rtc_io.h>
 
+#include <wasm3.h>
+
+unsigned char fib_wasm[] = {
+  0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x06, 0x01, 0x60,
+  0x01, 0x7f, 0x01, 0x7f, 0x03, 0x02, 0x01, 0x00, 0x07, 0x07, 0x01, 0x03,
+  0x66, 0x69, 0x62, 0x00, 0x00, 0x0a, 0x1f, 0x01, 0x1d, 0x00, 0x20, 0x00,
+  0x41, 0x02, 0x49, 0x04, 0x40, 0x20, 0x00, 0x0f, 0x0b, 0x20, 0x00, 0x41,
+  0x02, 0x6b, 0x10, 0x00, 0x20, 0x00, 0x41, 0x01, 0x6b, 0x10, 0x00, 0x6a,
+  0x0f, 0x0b
+};
+
+#define FATAL(func, msg) { LOG_INFO("Fatal: %s %s\n", func, msg); return; }
+// #define TSTART()         { tstart = micros(); }
+// #define TFINISH(s)       { tend = micros(); LOG_INFO("%s in %d us\n", s, tend-tstart); }
+
+void wasm_task(void*)
+{
+    uint32_t tend, tstart;
+    // TSTART();
+
+    M3Result result = m3Err_none;
+
+    IM3Environment env = m3_NewEnvironment ();
+    if (!env) FATAL("NewEnvironment", "failed");
+
+    IM3Runtime runtime = m3_NewRuntime (env, 1024, NULL);
+    if (!runtime) FATAL("NewRuntime", "failed");
+
+    IM3Module module;
+    result = m3_ParseModule (env, &module, fib_wasm, sizeof(fib_wasm));
+    if (result) FATAL("ParseModule", result);
+
+    result = m3_LoadModule (runtime, module);
+    if (result) FATAL("LoadModule", result);
+
+    IM3Function f;
+    result = m3_FindFunction (&f, runtime, "fib");
+    if (result) FATAL("FindFunction", result);
+
+    // TFINISH("Init");
+
+    LOG_INFO("Running fib(24)...\n");
+
+    // TSTART();
+
+    result = m3_CallV (f, 24);
+
+    // TFINISH("Done");
+
+    if (result == m3Err_none) {
+        uint32_t value = 0;
+        result = m3_GetResultsV (f, &value);
+        if (result) FATAL("GetResults: %s", result);
+
+        LOG_INFO("Result: %d\n", value);
+    } else {
+        M3ErrorInfo info;
+        m3_GetErrorInfo (runtime, &info);
+        LOG_INFO("Error: %d (%s)\n", result, info.message);
+        
+        if (info.file && strlen(info.file) && info.line) {
+            LOG_INFO("At %s:%d\n", info.file, info.line);
+        }
+    }
+}
+
 #ifdef ARCH_ESP32
 #include "mesh/http/WebServer.h"
 #include "nimble/NimbleBluetooth.h"
@@ -913,6 +979,13 @@ void setup()
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
     powerFSMthread = new PowerFSMThread();
     setCPUFast(false); // 80MHz is fine for our slow peripherals
+
+    LOG_DEBUG("Initializing wasm3...\n");
+    LOG_DEBUG("Wasm3 v%s (%s), build %s %s\n", M3_VERSION, M3_ARCH, __DATE__, __TIME__);
+
+    wasm_task(NULL);
+
+    LOG_DEBUG("Done.\n");
 }
 
 uint32_t rebootAtMsec;   // If not zero we will reboot at this time (used to reboot shortly after the update completes)
